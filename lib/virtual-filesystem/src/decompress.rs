@@ -15,3 +15,11 @@ impl Decompress for ZStdDecompression {
             .map_err(|e| e.into())
     }
 }
+
+pub struct NoDecompression;
+
+impl Decompress for NoDecompression {
+    fn decompress(compressed_data: Vec<u8>) -> Result<Vec<u8>, failure::Error> {
+        Ok(compressed_data)
+    }
+}

@@ -45,3 +45,37 @@ impl Vfs {
         Ok(vfs)
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::Vfs;
+    use crate::decompress::NoDecompression;
+    use std::fs::File;
+    use std::fs;
+    use std::io::{Read, Write};
+    use tempdir;
+
+    #[test]
+    fn empty_archive() {
+        let empty_archive = vec![];
+        let vfs_result = Vfs::new::<NoDecompression>(empty_archive);
+        assert!(vfs_result.is_ok(), "Failed to create file system from empty archive");
+        let vfs = vfs_result.unwrap();
+    }
+
+    #[test]
+    fn single_file_archive() {
+        // create temp dir with a temp file
+        let tmp_dir = tempdir::TempDir::new("single_file_archive").unwrap();
+        let file_path = tmp_dir.path().join("foo.txt");
+        let mut tmp_file = File::create(file_path.clone()).unwrap();
+        writeln!(tmp_file, "foo foo foo").unwrap();
+        let mut tar_data = vec![];
+        let mut ar = tar::Builder::new(tar_data);
+        ar.append_path_with_name(file_path, "foo.txt").unwrap();
+        let mut archive = ar.into_inner().unwrap();
+        let vfs_result = Vfs::new::<NoDecompression>(archive);
+        assert!(vfs_result.is_ok(), "Failed to create file system from empty archive");
+        let vfs = vfs_result.unwrap();
+    }
+}
