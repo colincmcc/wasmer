@@ -1,0 +1,14 @@
+[package]
+name = "wasmer-virtual-filesystem"
+version = "0.0.1"
+description = "Wasmer virtual filesystem"
+license = "MIT"
+authors = ["The Wasmer Engineering Team <engineering@wasmer.io>"]
+repository = "https://github.com/wasmerio/wasmer"
+edition = "2018"
+readme = "README.md"
+
+[dependencies]
+failure = "0.1"
+tar = "0.4"
+zstd = "0.4"
