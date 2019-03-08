@@ -2,6 +2,7 @@ use crate::decompress::ZStdDecompression;
 use crate::decompress::Decompress;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::io::Read;
 
 pub mod decompress;
 
@@ -18,10 +19,29 @@ pub type CompressedArchive = Vec<u8>;
 impl Vfs {
     pub fn new(compressed_archive: CompressedArchive) -> Result<Self, failure::Error> {
         let decompressed_archive = ZStdDecompression::decompress(compressed_archive)?;
-        let ar = tar::Archive::new(&decompressed_archive[..]);
-        // uncompress and unarchive
-        // push records into a vec, the indexes represent the keys
+        let mut ar = tar::Archive::new(&decompressed_archive[..]);
 
-        unimplemented!()
+        let mut data = vec![];
+        let mut paths = HashMap::new();
+
+        let entries = ar.entries()?;
+        for entry in entries {
+            let mut entry = entry?;
+            let path = entry.path()?.into_owned();
+            let mut file_data = vec![];
+            entry.read(&mut file_data)?;
+            // insert the file data into the vec
+            data.push(file_data);
+            let index = data.len();
+            // insert the path into the map
+            paths.insert(path, index);
+        }
+
+        let vfs = Vfs {
+            data,
+            paths,
+        };
+
+        Ok(vfs)
     }
 }
