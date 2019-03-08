@@ -34,6 +34,14 @@ pub struct Ctx {
     /// A pointer to an array of imported functions, indexed by `FuncIndex`.
     pub(crate) imported_funcs: *mut ImportedFunc,
 
+    /// A pointer to an array of signature ids. Conceptually, this maps
+    /// from a static, module-local signature id to a runtime-global
+    /// signature id. This is used to allow call-indirect to other
+    /// modules safely.
+    pub(crate) dynamic_sigindices: *const SigId,
+
+    pub(crate) local_functions: *const *const Func,
+
     local_backing: *mut LocalBacking,
     import_backing: *mut ImportBacking,
     module: *const ModuleInner,
@@ -58,6 +66,9 @@ impl Ctx {
             imported_tables: import_backing.vm_tables.as_mut_ptr(),
             imported_globals: import_backing.vm_globals.as_mut_ptr(),
             imported_funcs: import_backing.vm_functions.as_mut_ptr(),
+
+            dynamic_sigindices: local_backing.dynamic_sigindices.as_ptr(),
+            local_functions: local_backing.local_functions.as_ptr(),
 
             local_backing,
             import_backing,
@@ -85,6 +96,9 @@ impl Ctx {
             imported_tables: import_backing.vm_tables.as_mut_ptr(),
             imported_globals: import_backing.vm_globals.as_mut_ptr(),
             imported_funcs: import_backing.vm_functions.as_mut_ptr(),
+
+            dynamic_sigindices: local_backing.dynamic_sigindices.as_ptr(),
+            local_functions: local_backing.local_functions.as_ptr(),
 
             local_backing,
             import_backing,
@@ -162,6 +176,10 @@ impl Ctx {
 
     pub fn offset_signatures() -> u8 {
         7 * (mem::size_of::<usize>() as u8)
+    }
+
+    pub fn offset_local_functions() -> u8 {
+        8 * (mem::size_of::<usize>() as u8)
     }
 }
 
@@ -353,6 +371,11 @@ mod vm_offset_tests {
             Ctx::offset_imported_funcs() as usize,
             offset_of!(Ctx => imported_funcs).get_byte_offset(),
         );
+
+        assert_eq!(
+            Ctx::offset_local_functions() as usize,
+            offset_of!(Ctx => local_functions).get_byte_offset(),
+        );
     }
 
     #[test]
@@ -458,6 +481,9 @@ mod vm_ctx_tests {
             vm_memories: Map::new().into_boxed_map(),
             vm_tables: Map::new().into_boxed_map(),
             vm_globals: Map::new().into_boxed_map(),
+
+            dynamic_sigindices: Map::new().into_boxed_map(),
+            local_functions: Map::new().into_boxed_map(),
         };
         let mut import_backing = ImportBacking {
             memories: Map::new().into_boxed_map(),
