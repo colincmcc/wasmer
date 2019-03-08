@@ -17,8 +17,8 @@ pub struct Vfs {
 pub type CompressedArchive = Vec<u8>;
 
 impl Vfs {
-    pub fn new(compressed_archive: CompressedArchive) -> Result<Self, failure::Error> {
-        let decompressed_archive = ZStdDecompression::decompress(compressed_archive)?;
+    pub fn new<D: Decompress>(compressed_archive: CompressedArchive) -> Result<Self, failure::Error> {
+        let decompressed_archive = D::decompress(compressed_archive)?;
         let mut ar = tar::Archive::new(&decompressed_archive[..]);
 
         let mut data = vec![];
