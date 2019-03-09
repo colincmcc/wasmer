@@ -102,4 +102,44 @@ mod test {
         let expected_data = "foo foo foo\n".as_bytes();
         assert_eq!(actual_data, expected_data, "Contents were not equal");
     }
+
+    #[test]
+    fn two_files_in_archive() {
+        // create temp dir with a temp file
+        let tmp_dir = tempdir::TempDir::new("two_files_in_archive").unwrap();
+        let foo_file_path = tmp_dir.path().join("foo.txt");
+        let bar_file_path = tmp_dir.path().join("bar.txt");
+
+        let mut foo_tmp_file = File::create(foo_file_path.clone()).unwrap();
+        let mut bar_tmp_file = File::create(bar_file_path.clone()).unwrap();
+
+        writeln!(foo_tmp_file, "foo foo foo").unwrap();
+        writeln!(bar_tmp_file, "bar bar").unwrap();
+
+        let mut tar_data = vec![];
+        let mut ar = tar::Builder::new(tar_data);
+        ar.append_path_with_name(foo_file_path, "foo.txt").unwrap();
+        ar.append_path_with_name(bar_file_path, "bar.txt").unwrap();
+        let mut archive = ar.into_inner().unwrap();
+
+        let vfs_result = Vfs::new::<NoDecompression>(archive);
+        assert!(vfs_result.is_ok(), "Failed to create file system from empty archive");
+        let vfs = vfs_result.unwrap();
+
+        // read the file
+        let foo_read_result = vfs.read("foo.txt");
+        let bar_read_result = vfs.read("bar.txt");
+
+        assert!(foo_read_result.is_ok(), "Failed to read foo.txt from vfs");
+        assert!(bar_read_result.is_ok(), "Failed to read bar.txt from vfs");
+
+        let foo_actual_data = foo_read_result.unwrap();
+        let bar_actual_data = bar_read_result.unwrap();
+
+        let foo_expected_data = "foo foo foo\n".as_bytes();
+        let bar_expected_data = "bar bar\n".as_bytes();
+
+        assert_eq!(foo_actual_data, foo_expected_data, "Contents of `foo.txt` is not correct");
+        assert_eq!(bar_actual_data, bar_expected_data, "Contents of `bar.txt` is not correct");
+    }
 }
