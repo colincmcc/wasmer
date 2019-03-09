@@ -5,7 +5,7 @@ use std::io::Read;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-pub type Fd = i32;
+pub type Fd = usize;
 
 pub type File = (PathBuf, usize);
 pub type DataVec = Vec<Vec<u8>>;
@@ -70,7 +70,7 @@ impl Vfs {
     }
 
     fn create_file_descriptor(&mut self) -> Fd {
-        self.fd_count.fetch_add(1, Ordering::Monotonic)
+        self.fd_count.fetch_add(1, Ordering::SeqCst)
     }
 
     /// Like fs::read, will read a file from the virtual filesystem.
@@ -85,26 +85,13 @@ impl Vfs {
 
     /// Returns a new file descriptor for the file
     pub fn open<P: AsRef<Path>>(&mut self, path: P) -> Result<Fd, failure::Error> {
-        // if the path exists in the file system, create a new file descriptor
-        let new_fd = self.create_file_descriptor();
-        // associate the file descriptor with the path and the data
-
-        let get_fd_result = self.paths.get(path.as_ref());
-        match get_fd_result {
-            Some(fd) => { // there is an existing file descriptor
-                Ok(fd)
-            },
-            None => { // no fd, so create a new one
-                let fd: usize = self.fd_count.fetch_add(1, Ordering::Monotonic);
-                Ok(fd)
-//                unimplemented!()
-            }
+        let path = path.as_ref();
+        if self.paths.contains_key(path) {
+            Ok(self.create_file_descriptor())
         }
-//        if self.data.len() < *read_result {
-//            panic!("File data for path in virtual file system does not exist. {}", read_result);
-//        }
-//        let data = self.data.get(*read_result).unwrap().clone();
-        Ok(0)
+        else {
+            Err(VfsError::FileDoesNotExist.into())
+        }
     }
 }
 
@@ -122,9 +109,9 @@ mod open_test {
     use crate::vfs::Vfs;
 
     #[test]
-    fn open_file_non_existent_file() {
+    fn open_files() {
         // create temp dir with a temp file
-        let tmp_dir = tempdir::TempDir::new("single_file_archive").unwrap();
+        let tmp_dir = tempdir::TempDir::new("open_files").unwrap();
         let file_path = tmp_dir.path().join("foo.txt");
         let mut tmp_file = File::create(file_path.clone()).unwrap();
         writeln!(tmp_file, "foo foo foo").unwrap();
@@ -135,11 +122,43 @@ mod open_test {
 
         let vfs_result = Vfs::new::<NoDecompression>(archive);
         assert!(vfs_result.is_ok(), "Failed to create file system from empty archive");
-        let vfs = vfs_result.unwrap();
+        let mut vfs = vfs_result.unwrap();
 
         // open the file, get a file descriptor
-//        let open_result = vfs.open();
-//        assert!(open_result.is_ok(), "Failed to open file in the virtual filesystem.");
+        let open_result = vfs.open("foo.txt");
+        assert!(open_result.is_ok(), "Failed to open file in the virtual filesystem.");
+
+        // open the same file twice, and expect different descriptors
+        let fd_1 = open_result.unwrap();
+        let open_result_2 = vfs.open("foo.txt");
+        assert!(open_result_2.is_ok(), "Failed to open the same file twice in the virtual filesystem.");
+        let fd_2 = open_result_2.unwrap();
+        assert_ne!(fd_1, fd_2, "Open produced the same file descriptor twice.");
+    }
+
+    #[test]
+    fn open_non_existent_file() {
+        // create temp dir with a temp file
+        let tmp_dir = tempdir::TempDir::new("open_non_existent_file").unwrap();
+        let file_path = tmp_dir.path().join("foo.txt");
+        let mut tmp_file = File::create(file_path.clone()).unwrap();
+        writeln!(tmp_file, "foo foo foo").unwrap();
+        let mut tar_data = vec![];
+        let mut ar = tar::Builder::new(tar_data);
+        ar.append_path_with_name(file_path, "foo.txt").unwrap();
+        let mut archive = ar.into_inner().unwrap();
+
+        let vfs_result = Vfs::new::<NoDecompression>(archive);
+        assert!(vfs_result.is_ok(), "Failed to create file system from empty archive");
+        let mut vfs = vfs_result.unwrap();
+
+        // read the file
+        let read_result = vfs.read("foo.txt");
+        assert!(read_result.is_ok(), "Failed to read file from vfs");
+
+        // open a non-existent file
+        let open_result_2 = vfs.open("bar.txt");
+        assert!(open_result_2.is_err(), "Somehow opened a non-existent file.");
     }
 }
 
