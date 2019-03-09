@@ -30,11 +30,11 @@ impl Vfs {
         for entry in entries {
             let mut entry = entry?;
             let path = entry.path()?.into_owned();
-            let mut file_data = vec![];
-            entry.read(&mut file_data)?;
+            let mut file_data = String::new();
+            entry.read_to_string(&mut file_data)?;
             // insert the file data into the vec
             let index = data.len();
-            data.push(file_data);
+            data.push(file_data.into_bytes());
             // insert the path into the map
             paths.insert(path, index);
         }
@@ -90,6 +90,7 @@ mod test {
         let mut ar = tar::Builder::new(tar_data);
         ar.append_path_with_name(file_path, "foo.txt").unwrap();
         let mut archive = ar.into_inner().unwrap();
+
         let vfs_result = Vfs::new::<NoDecompression>(archive);
         assert!(vfs_result.is_ok(), "Failed to create file system from empty archive");
         let vfs = vfs_result.unwrap();
