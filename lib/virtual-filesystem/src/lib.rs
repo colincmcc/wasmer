@@ -1,7 +1,9 @@
-use crate::decompress::ZStdDecompression;
+#[macro_use]
+extern crate failure;
+
 use crate::decompress::Decompress;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
 use std::io::Read;
 
 pub mod decompress;
@@ -31,8 +33,8 @@ impl Vfs {
             let mut file_data = vec![];
             entry.read(&mut file_data)?;
             // insert the file data into the vec
-            data.push(file_data);
             let index = data.len();
+            data.push(file_data);
             // insert the path into the map
             paths.insert(path, index);
         }
@@ -44,6 +46,21 @@ impl Vfs {
 
         Ok(vfs)
     }
+
+    pub fn read<P: AsRef<Path>>(&self, path: P) -> Result<Vec<u8>, failure::Error> {
+        let read_result = self.paths.get(path.as_ref()).ok_or(VfsError::FileDoesNotExist)?;
+        if self.data.len() < *read_result {
+            panic!("File data for path in virtual file system does not exist. {}", read_result);
+        }
+        let data = self.data.get(*read_result).unwrap().clone();
+        Ok(data)
+    }
+}
+
+#[derive(Debug, Fail)]
+pub enum VfsError {
+    #[fail(display = "File does not exist.")]
+    FileDoesNotExist,
 }
 
 #[cfg(test)]
@@ -51,7 +68,6 @@ mod test {
     use crate::Vfs;
     use crate::decompress::NoDecompression;
     use std::fs::File;
-    use std::fs;
     use std::io::{Read, Write};
     use tempdir;
 
@@ -77,5 +93,12 @@ mod test {
         let vfs_result = Vfs::new::<NoDecompression>(archive);
         assert!(vfs_result.is_ok(), "Failed to create file system from empty archive");
         let vfs = vfs_result.unwrap();
+
+        // read the file
+        let read_result = vfs.read("foo.txt");
+        assert!(read_result.is_ok(), "Failed to read file from vfs");
+        let actual_data = read_result.unwrap();
+        let expected_data = "foo foo foo\n".as_bytes();
+        assert_eq!(actual_data, expected_data, "Contents were not equal");
     }
 }
